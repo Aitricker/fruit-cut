@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fruit Ninja Realistic</title>
+  <style>
+    body, html { margin: 0; padding: 0; overflow: hidden; background: linear-gradient(to bottom, #020024, #090979, #00d4ff); }
+    canvas { display: none; }
+    #score {
+      position: absolute; top: 10px; left: 10px; color: white;
+      font-size: 24px; font-family: Arial, sans-serif; z-index: 10; display: none;
+    }
+    #startScreen {
+      width: 100%; height: 100%; background: linear-gradient(to bottom, #000428, #004e92);
+      display: flex; justify-content: center; align-items: center; flex-direction: column;
+      position: absolute; top: 0; left: 0; z-index: 20;
+    }
+    #startScreen button {
+      padding: 15px 30px;
+      font-size: 24px;
+      background: #ff5722;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-family: Arial, sans-serif;
+      transition: 0.3s;
+    }
+    #startScreen button:hover {
+      background: #e64a19;
+      transform: scale(1.1);
+    }
+  </style>
+</head>
+<body>
+
+<div id="startScreen">
+  <h1 style="color: white; font-family: Arial, sans-serif;">Fruit Ninja</h1>
+  <button onclick="startGame()">Start Game</button>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+<div id="score">Score: 0</div>
+
+<!-- Sounds -->
+<audio id="sliceSound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_0c4f8c17b1.mp3?filename=slice-1-7182.mp3" preload="auto"></audio>
+<audio id="bgMusic" src="https://cdn.pixabay.com/download/audio/2023/03/06/audio_55c1105cf8.mp3?filename=calm-relaxing-ambient-141076.mp3" preload="auto" loop></audio>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const startScreen = document.getElementById('startScreen');
+const scoreDiv = document.getElementById('score');
+const sliceSound = document.getElementById('sliceSound');
+const bgMusic = document.getElementById('bgMusic');
+
+let width = window.innerWidth;
+let height = window.innerHeight;
+canvas.width = width;
+canvas.height = height;
+
+let fruits = [];
+const fruitEmojis = ["🍎", "🍐", "🍊", "🍋", "🍌", "🍉", "🥭", "🍑", "🍒", "🫐", "🍓", "🥥", "🌶"];
+let score = 0;
+const slices = [];
+let gameStarted = false;
+
+function startGame() {
+  sliceSound.play().then(() => {
+    sliceSound.pause();
+    sliceSound.currentTime = 0;
+    bgMusic.play();
+  });
+
+  startScreen.style.display = 'none';
+  canvas.style.display = 'block';
+  scoreDiv.style.display = 'block';
+  gameStarted = true;
+  spawnFruit();
+  gameLoop();
+}
+
+function randomFruit() {
+  const x = Math.random() * (width - 100) + 50;
+  const size = 70;
+  const speedY = -(20 + Math.random() * 3); // High upward speed to reach top
+  const speedX = (Math.random() - 0.5) * 5;
+  return {
+    emoji: fruitEmojis[Math.floor(Math.random() * fruitEmojis.length)],
+    x, y: height + size, size,
+    speedX, speedY,
+    rotation: 0,
+    rotateSpeed: (Math.random() - 0.5) * 5,
+    isHalf: false,
+    halfSide: null
+  };
+}
+
+function spawnFruit() {
+  if (gameStarted) {
+    fruits.push(randomFruit());
+    setTimeout(spawnFruit, 1700); // Delay between fruits
+  }
+}
+
+function drawFruits() {
+  ctx.clearRect(0, 0, width, height);
+
+  fruits.forEach((fruit, index) => {
+    ctx.save();
+    ctx.translate(fruit.x, fruit.y);
+    ctx.rotate(fruit.rotation * Math.PI / 180);
+    ctx.font = `${fruit.size}px Arial`;
+    ctx.textAlign = "center";
+    ctx.fillText(fruit.emoji, 0, 0);
+    ctx.restore();
+
+    fruit.x += fruit.speedX;
+    fruit.y += fruit.speedY;
+    fruit.speedY += 0.25; // Soft gravity
+    fruit.rotation += fruit.rotateSpeed;
+
+    if (fruit.y - fruit.size > height + 100) {
+      fruits.splice(index, 1);
+    }
+  });
+
+  drawSlices();
+}
+
+function updateScore() {
+  document.getElementById('score').innerText = "Score: " + score;
+}
+
+function drawSlices() {
+  slices.forEach((slice, index) => {
+    ctx.beginPath();
+    ctx.moveTo(slice.x1, slice.y1);
+    ctx.lineTo(slice.x2, slice.y2);
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    slice.life--;
+    if (slice.life <= 0) slices.splice(index, 1);
+  });
+}
+
+function sliceFruit(x, y) {
+  fruits.forEach((fruit, index) => {
+    const dx = fruit.x - x;
+    const dy = fruit.y - y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < fruit.size / 2 && !fruit.isHalf) {
+      sliceSound.currentTime = 0;
+      sliceSound.play();
+
+      const newFruit1 = {...fruit, speedX: fruit.speedX - 2, rotateSpeed: fruit.rotateSpeed - 4, isHalf: true, halfSide: "left"};
+      const newFruit2 = {...fruit, speedX: fruit.speedX + 2, rotateSpeed: fruit.rotateSpeed + 4, isHalf: true, halfSide: "right"};
+
+      fruits.splice(index, 1, newFruit1, newFruit2);
+
+      score++;
+      updateScore();
+    }
+  });
+}
+
+function createSlice(x1, y1, x2, y2) {
+  slices.push({x1, y1, x2, y2, life: 15});
+}
+
+let lastTouch = null;
+
+canvas.addEventListener('touchmove', (e) => {
+  if (!gameStarted) return;
+  e.preventDefault();
+  const touch = e.touches[0];
+  const rect = canvas.getBoundingClientRect();
+  const x = touch.clientX - rect.left;
+  const y = touch.clientY - rect.top;
+
+  if (lastTouch) {
+    createSlice(lastTouch.x, lastTouch.y, x, y);
+    sliceFruit(x, y);
+  }
+  lastTouch = {x, y};
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  if (!gameStarted) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  if (e.buttons) {
+    if (lastTouch) {
+      createSlice(lastTouch.x, lastTouch.y, x, y);
+      sliceFruit(x, y);
+    }
+    lastTouch = {x, y};
+  }
+});
+
+canvas.addEventListener('touchend', () => { lastTouch = null; });
+canvas.addEventListener('mouseup', () => { lastTouch = null; });
+
+function gameLoop() {
+  if (gameStarted) {
+    drawFruits();
+    requestAnimationFrame(gameLoop);
+  }
+}
+</script>
+
+</body>
+</html>
